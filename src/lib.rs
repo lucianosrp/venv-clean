@@ -4,6 +4,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+#[derive(Debug)]
 pub struct VenvDir {
     pub path: PathBuf,
 }
@@ -13,6 +14,7 @@ impl VenvDir {
     }
 }
 
+#[derive(Debug)]
 pub struct VenvCollection {
     pub checked_files: usize,
     pub data: Vec<VenvDir>,
@@ -81,4 +83,37 @@ pub fn find_venv_dirs(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use tempfile::{tempdir, TempDir};
+
+    fn make_temp_venv_dir(n: usize) -> io::Result<TempDir> {
+        let f = tempdir().expect("Couln't create tempdir");
+
+        for i in 0..=n - 1 {
+            let inner_dir = f.path().join(format!("test_dir_{}", i));
+
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .create(inner_dir.join(".venv"))
+                .expect("Couln't create .venv");
+        }
+        Ok(f)
+    }
+
+    #[test]
+    fn test_temp_dir() -> io::Result<()> {
+        let mut venv_dirs = VenvCollection::default();
+        let n_venv = 2;
+        let dirs = make_temp_venv_dir(n_venv)?;
+        let reserved: Vec<&str> = Vec::new();
+        let _ = find_venv_dirs(&dirs.path().to_path_buf(), &mut venv_dirs, &reserved);
+        assert!(dirs.path().exists());
+        assert!(venv_dirs.len() == n_venv);
+        Ok(())
+    }
 }
