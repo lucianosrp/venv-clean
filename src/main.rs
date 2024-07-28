@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use num_format::Locale;
 use num_format::ToFormattedString;
+use venv_clean::VenvDir;
 use venv_clean::{find_venv_dirs, VenvCollection};
 
 #[derive(Parser, Debug)]
@@ -18,15 +19,31 @@ struct Args {
     #[arg(short, long)]
     interactive: bool,
 
+    /// Only do the scan (No files will be deleted)
+    #[arg(short, long)]
+    scan_only: bool,
+
+    /// Dry run (No files will be deleted)
+    #[arg(short, long)]
+    dry: bool,
+
     /// Paths to ignore
     #[arg(long,num_args(1..))]
     ignore_paths: Option<Vec<String>>,
+}
+
+fn remove_dir_all_cond(venv_dir: VenvDir, size_deleted: &mut u64, cond: bool) {
+    if cond {
+        *size_deleted += &venv_dir.get_dir_size().unwrap_or_default();
+        let _ = fs::remove_dir_all(venv_dir.path);
+    }
 }
 
 fn main() -> io::Result<()> {
     let cli = Args::parse();
     let root_dir = cli.dir;
     let mut venv_dirs = VenvCollection::new();
+    let delete_cond: bool = !cli.scan_only || !cli.dry;
 
     #[cfg(target_os = "linux")]
     let mut reserved_directories: Vec<&str> = vec![];
@@ -66,7 +83,9 @@ fn main() -> io::Result<()> {
         let venv_dir_path = &venv_dir.path;
         if cli.interactive {
             let mut user_option = String::new();
-            print!("Do you wish to remove {:?} ? (y/n):", venv_dir_path);
+
+            print!("Do you wish to remove {:?} ? (y/N):", venv_dir_path);
+
             let _ = io::stdout().flush();
             io::stdin()
                 .read_line(&mut user_option)
@@ -74,12 +93,10 @@ fn main() -> io::Result<()> {
             print!("");
 
             if user_option.trim().to_lowercase() == "y" {
-                size_deleted += &venv_dir.get_dir_size().unwrap_or_default();
-                let _ = fs::remove_dir_all(venv_dir_path);
+                remove_dir_all_cond(venv_dir, &mut size_deleted, delete_cond)
             }
         } else {
-            size_deleted += &venv_dir.get_dir_size().unwrap_or_default();
-            let _ = fs::remove_dir_all(venv_dir_path);
+            remove_dir_all_cond(venv_dir, &mut size_deleted, delete_cond)
         }
     }
     println!(
